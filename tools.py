@@ -1,11 +1,14 @@
 from datetime import datetime
+import zoneinfo
 from langchain_core.tools import tool
 from ddgs import DDGS
 
 @tool
 def get_current_datetime() -> str:
-    """Returns the current live date and time."""
-    return datetime.now().strftime("%A, %d %B %Y, %I:%M %p")
+    """Returns the current live date and time in Indian Standard Time (IST)."""
+    tz = zoneinfo.ZoneInfo("Asia/Kolkata")
+    now = datetime.now(tz)
+    return now.strftime("%A, %d %B %Y, %I:%M %p (IST)")
 
 @tool
 def web_search(query: str) -> str:

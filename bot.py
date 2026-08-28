@@ -1,58 +1,64 @@
 import os
 import requests
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
+from ai_agent import app_agent
 from langchain_core.messages import HumanMessage
-from ai_agent import agent
 
+# Load environment variables
 load_dotenv()
-
 TOKEN = os.getenv("TELEGRAM_KEY")
 
-def force_takeover():
-    """Pending updates aur old webhook conflicts clear karta hai."""
-    try:
-        base = f"https://api.telegram.org/bot{TOKEN}"
-        requests.post(f"{base}/deleteWebhook", params={"drop_pending_updates": True}, timeout=5)
-    except Exception:
-        pass
+# Simple background HTTP server for Render port binding
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
 
-def extract_text(msg):
-    c = msg.content
-    if isinstance(c, str):
-        return c
-    parts = [b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"]
-    return "\n".join(p for p in parts if p.strip()) or "(no response)"
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    server.serve_forever()
+
+def force_takeover():
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=True"
+        requests.get(url, timeout=10)
+    except Exception as e:
+        print(f"Webhook reset notice: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
     user_text = update.message.text
-    chat_id = str(update.effective_chat.id)
+    chat_id = str(update.message.chat_id)
+    config = {"configurable": {"thread_id": chat_id}}
 
     try:
-        result = await agent.ainvoke(
+        response = app_agent.invoke(
             {"messages": [HumanMessage(content=user_text)]},
-            config={"configurable": {"thread_id": chat_id}}
+            config=config
         )
-        reply = extract_text(result["messages"][-1])
-        await update.message.reply_text(reply)
+        ai_reply = response["messages"][-1].content
+        await update.message.reply_text(ai_reply)
     except Exception as e:
-        print(f"[Error Handled]: {e}")
-        # Network retry / fallback
-        try:
-            await update.message.reply_text("Connection reconnected. Kripya apna message dobara bhejein.")
-        except Exception:
-            pass
+        print(f"Error handling message: {e}")
+        await update.message.reply_text("Sorry, kuch issue aa gaya. Please thodi der baad try karein.")
 
 if __name__ == "__main__":
     force_takeover()
+
+    # Start background web server for Render Web Service compliance
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
     print("Starting Telegram Bot with Network Resiliency...")
 
-    # Network drops aur timeouts ko handle karne ke liye resilient HTTP request config
     request_config = HTTPXRequest(
         connection_pool_size=8,
         connect_timeout=30.0,

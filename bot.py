@@ -32,6 +32,24 @@ def force_takeover():
     except Exception as e:
         print(f"Webhook reset notice: {e}")
 
+def extract_text(content):
+    """Clean plain text extraction from complex AI response formats"""
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        texts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                texts.append(item["text"])
+            elif isinstance(item, str):
+                texts.append(item)
+            elif hasattr(item, "text"):
+                texts.append(item.text)
+        return " ".join(texts)
+    elif isinstance(content, dict) and "text" in content:
+        return content["text"]
+    return str(content)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -45,7 +63,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {"messages": [HumanMessage(content=user_text)]},
             config=config
         )
-        ai_reply = response["messages"][-1].content
+        raw_content = response["messages"][-1].content
+        ai_reply = extract_text(raw_content)
         await update.message.reply_text(ai_reply)
     except Exception as e:
         print(f"Error handling message: {e}")

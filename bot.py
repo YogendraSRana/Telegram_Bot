@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
-from ai_agent import app_agent
+from ai_agent import agent
 from langchain_core.messages import HumanMessage
 
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_KEY")
 
-# Simple background HTTP server for Render port binding
+# Background HTTP server for Render Web Service compliance
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -41,7 +41,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = {"configurable": {"thread_id": chat_id}}
 
     try:
-        response = app_agent.invoke(
+        response = agent.invoke(
             {"messages": [HumanMessage(content=user_text)]},
             config=config
         )
@@ -54,7 +54,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == "__main__":
     force_takeover()
 
-    # Start background web server for Render Web Service compliance
+    # Start background web server for Render port binding
     threading.Thread(target=run_dummy_server, daemon=True).start()
 
     print("Starting Telegram Bot with Network Resiliency...")
